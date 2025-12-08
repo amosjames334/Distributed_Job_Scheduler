@@ -1,0 +1,26 @@
+[project]
+name = "distributed-job-scheduler"
+version = "0.1.0"
+description = "Distributed Job Scheduler"
+authors = [
+    {name = "Amos Jaimes",email = "amosjames334@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi (>=0.124.0,<0.125.0)",
+    "uvicorn (>=0.38.0,<0.39.0)",
+    "sqlalchemy (>=2.0.44,<3.0.0)",
+    "asyncpg (>=0.31.0,<0.32.0)",
+    "redis (>=5.0.0,<8.0.0)",
+    "pydantic (>=2.12.5,<3.0.0)",
+    "psycopg2-binary (>=2.9.11,<3.0.0)",
+    "etcd3 (>=0.12.0,<0.13.0)",
+    "requests (>=2.32.5,<3.0.0)",
+    "typing-extensions (>=4.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
