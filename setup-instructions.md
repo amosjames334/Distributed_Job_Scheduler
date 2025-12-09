@@ -16,7 +16,7 @@ docker-compose up -d --build
 ### 2. Verify Services
 - **API:** [http://localhost:8000/health](http://localhost:8000/health) (Should return `{"status": "ok"}`)
 - **Prometheus:** [http://localhost:9090](http://localhost:9090)
-- **Grafana:** [http://localhost:3000](http://localhost:3000) (User: `admin`, Pass: `admin`)
+- **Grafana:** [http://localhost:3000](http://localhost:3000) (User: `admin`, Pass: `admin`) - *Check "Distributed Job Scheduler - Overview" dashboard*
 - **MinIO Console:** [http://localhost:9001](http://localhost:9001) (User: `minio`, Pass: `minio123`)
 
 ### 3. Phase 1 Verification (MVP)
@@ -65,3 +65,70 @@ docker-compose up -d --build
         docker-compose logs -f scheduler
         ```
         One instance should say `I am the LEADER`, the other `I am a FOLLOWER`.
+
+    ### Phase 4: Verify Reliability
+    1.  **Submit Failing Job:**
+        ```bash
+        curl -X POST http://localhost:8000/jobs \
+          -H "Content-Type: application/json" \
+          -d '{"command": ["ls", "/nonexistent"], "image": "ubuntu:latest"}'
+        ```
+    2.  **Watch Retries:**
+        The job status will cycle `FAILED` -> `PENDING` -> `RUNNING` -> `FAILED` until `max_retries` (3) is reached.
+        ```bash
+        curl http://localhost:8000/jobs/<job_id>
+        ```
+
+## Usage Guide
+
+### 1. Job Submission
+**Endpoint:** `POST /jobs`
+**Description:** Submits a new job to the distributed system.
+**Format (JSON):**
+```json
+{
+  "command": ["executable", "arg1", "arg2"],  // Required: List of strings
+  "image": "image:tag",                       // Optional: Docker image (default: ubuntu:latest)
+  "resources": {"cpu": 0.5, "mem_mb": 128}    // Optional: Resource limits
+}
+```
+
+**Examples:**
+
+*   **Bash (curl):**
+    ```bash
+    curl -X POST http://localhost:8000/jobs \
+      -H "Content-Type: application/json" \
+      -d '{"command": ["echo", "Hello Distributed World"], "image": "alpine:latest"}'
+    ```
+
+*   **PowerShell:**
+    ```powershell
+    Invoke-WebRequest -Uri "http://localhost:8000/jobs" `
+      -Method Post `
+      -Headers @{ "Content-Type" = "application/json" } `
+      -Body '{"command": ["python3", "-c", "print(1+1)"], "image": "python:3.9-slim"}'
+    ```
+
+### 2. Job Status
+**Endpoint:** `GET /jobs/{job_id}`
+**Description:** Check the current status of a job.
+**Response:**
+```json
+{
+  "id": "uuid",
+  "status": "PENDING | QUEUED | RUNNING | SUCCEEDED | FAILED",
+  "result": "...", (if applicable)
+  "retry_count": 0
+}
+```
+
+### 3. Observability
+**Endpoint:** `GET /metrics`
+**Description:** Prometheus metrics for system monitoring.
+**Key Metrics:**
+- `job_submissions_total`: Total jobs received by API.
+- `jobs_scheduled_total`: Jobs assigned to workers.
+- `jobs_processed_total`: Jobs completed by workers (status=`succeeded`/`failed`).
+- `active_workers`: Number of healthy workers connected.
+

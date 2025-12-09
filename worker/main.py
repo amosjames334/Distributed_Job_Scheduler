@@ -9,6 +9,11 @@ from .database import get_db_session, engine
 from .models import Job, JobStatus
 from .executor import DockerExecutor
 from datetime import datetime
+from prometheus_client import start_http_server, Counter, Histogram
+
+# Metrics
+JOBS_PROCESSED = Counter('jobs_processed_total', 'Jobs processed by worker', ['status'])
+JOB_DURATION = Histogram('job_duration_seconds', 'Time spent processing job')
 
 # Configuration
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -19,6 +24,13 @@ WORKER_QUEUE = f"worker_queue:{CONSUMER_NAME}"
 async def main():
     print(f"Worker {CONSUMER_NAME} starting...")
     
+    # Start Metrics Server
+    try:
+        start_http_server(8000)
+        print("Worker metrics server started on 8000")
+    except Exception as e:
+        print(f"Failed to start metrics: {e}")
+
     # 1. Connect to Redis
     r = redis.from_url(REDIS_URL)
     
@@ -85,13 +97,17 @@ async def process_job(job_id: str, executor: DockerExecutor):
             image = job.image
             
             print(f"Running job {job_id}: {command}")
-            exit_code, logs = executor.run_job(image, command)
+            
+            with JOB_DURATION.time():
+                exit_code, logs = executor.run_job(image, command)
 
             # Update status
             if exit_code == 0:
                 job.status = JobStatus.SUCCEEDED
+                JOBS_PROCESSED.labels(status='succeeded').inc()
             else:
                 job.status = JobStatus.FAILED
+                JOBS_PROCESSED.labels(status='failed').inc()
             
             job.finished_at = datetime.utcnow()
             await session.commit()
@@ -100,6 +116,7 @@ async def process_job(job_id: str, executor: DockerExecutor):
         except Exception as e:
             print(f"Failed processing job {job_id}: {e}")
             await session.rollback()
+            JOBS_PROCESSED.labels(status='error').inc()
         finally:
              await session.close()
         break 

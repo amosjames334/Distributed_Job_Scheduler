@@ -57,6 +57,9 @@ services:
     image: grafana/grafana
     ports:
       - "3000:3000"
+    volumes:
+      - ./infra/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
 
@@ -101,6 +104,7 @@ services:
         condition: service_healthy
     environment:
       - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql+asyncpg://user:password@postgres:5432/scheduler
       # In a real scenario, we'd mount the docker socket or use dind
       # For now, simplistic
     volumes:

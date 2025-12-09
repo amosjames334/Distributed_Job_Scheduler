@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Response
 from pydantic import BaseModel
 from typing import List, Optional
 import uuid
@@ -7,8 +7,12 @@ import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import engine, Base, get_db
 from .models import Job, JobStatus
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 
 app = FastAPI(title="Distributed Job Scheduler API")
+
+# Metrics
+JOB_SUBMISSIONS = Counter('job_submissions_total', 'Total number of jobs submitted')
 
 # Redis connection
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -28,8 +32,14 @@ async def startup():
 async def health():
     return {"status": "ok"}
 
+@app.get("/metrics")
+async def metrics():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 @app.post("/jobs")
 async def submit_job(job_data: JobSubmit, db: AsyncSession = Depends(get_db)):
+    JOB_SUBMISSIONS.inc()
+    
     # 1. Create Job in DB
     new_job = Job(
         command=job_data.command,

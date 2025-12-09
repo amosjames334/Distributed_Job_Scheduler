@@ -4,6 +4,11 @@ import redis.asyncio as redis
 from sqlalchemy.future import select
 from .database import get_db_session, get_etcd_client
 from .models import Job, JobStatus
+from prometheus_client import start_http_server, Counter, Gauge
+
+# Metrics
+JOBS_SCHEDULED = Counter('jobs_scheduled_total', 'Total number of jobs successfully scheduled')
+ACTIVE_WORKERS = Gauge('active_workers', 'Number of currently active workers')
 
 # Configuration
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -16,7 +21,17 @@ LEADER_KEY = "/scheduler/leader"
 LEASE_TTL = 10 
 
 async def main():
-    print(f"Scheduler {SCHEDULER_CONSUMER} starting...")
+    print(f"Scheduler {SCHEDULER_CONSUMER} starting...", flush=True)
+    
+    try:
+        print("DEBUG: Attempting to start metrics server on 8000...", flush=True)
+        start_http_server(8000)
+        print("DEBUG: Metrics server started on port 8000", flush=True)
+    except Exception as e:
+        print(f"DEBUG: Failed to start metrics server: {e}", flush=True)
+        import sys
+        sys.exit(1)
+
     etcd = get_etcd_client()
     
     while True:
@@ -196,8 +211,24 @@ async def run_scheduler_loop():
                         await asyncio.sleep(2)
                         continue
                     
+                    # Validate workers (Health Check)
+                    valid_workers = []
+                    for w_bytes in workers:
+                         w_id = w_bytes.decode('utf-8')
+                         if await r.exists(f"worker:heartbeat:{w_id}"):
+                             valid_workers.append(w_id)
+                         else:
+                             # Lazy cleanup
+                             print(f"Removing dead worker from set: {w_id}")
+                             await r.srem(WORKERS_SET, w_id)
+                    
+                    if not valid_workers:
+                         print("No alive workers available! waiting...")
+                         await asyncio.sleep(2)
+                         continue
+
                     # Pick 1st one
-                    worker_id = list(workers)[0].decode('utf-8')
+                    worker_id = valid_workers[0]
                     
                     # 3. Assign Job in DB
                     if await assign_job(job_id, worker_id):
