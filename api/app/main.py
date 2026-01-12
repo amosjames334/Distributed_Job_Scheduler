@@ -19,9 +19,10 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL)
 
 class JobSubmit(BaseModel):
-    command: List[str]
-    image: str = "ubuntu:latest"
+    command: List[str] = []
+    image: str = "python:3.9" # Default to python for script execution
     resources: dict = {"cpu": 0.5, "mem_mb": 128}
+    script: Optional[str] = None # Optional script content
 
 @app.on_event("startup")
 async def startup():
@@ -44,7 +45,8 @@ async def submit_job(job_data: JobSubmit, db: AsyncSession = Depends(get_db)):
     new_job = Job(
         command=job_data.command,
         image=job_data.image,
-        status=JobStatus.PENDING
+        status=JobStatus.PENDING,
+        script_content=job_data.script
     )
     db.add(new_job)
     await db.commit()
@@ -76,4 +78,17 @@ async def get_job(job_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
     
     return job.to_dict()
+
+@app.get("/jobresult/{job_id}")
+async def get_job_result(job_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        job_uuid = uuid.UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID")
+        
+    job = await db.get(Job, job_uuid)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    return {"job_id": str(job.id), "result": job.result, "status": job.status}
 

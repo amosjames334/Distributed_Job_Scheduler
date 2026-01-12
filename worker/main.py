@@ -95,12 +95,15 @@ async def process_job(job_id: str, executor: DockerExecutor):
             # Execute
             command = job.command
             image = job.image
+            script_content = job.script_content
             
-            print(f"Running job {job_id}: {command}")
+            print(f"Running job {job_id}: {command} (script: {bool(script_content)})")
             
             with JOB_DURATION.time():
-                exit_code, logs = executor.run_job(image, command)
-
+                exit_code, logs = executor.run_job(image, command, script_content=script_content)
+            
+            job.result = logs
+            
             # Update status
             if exit_code == 0:
                 job.status = JobStatus.SUCCEEDED

@@ -22,6 +22,9 @@ class Job(Base):
     image = Column(String, default="ubuntu:latest")
     
     assigned_worker = Column(String, nullable=True)
+
+    script_content = Column(String, nullable=True)
+    result = Column(String, nullable=True)
     
     retry_count = Column(Integer, default=0)
     max_retries = Column(Integer, default=3)

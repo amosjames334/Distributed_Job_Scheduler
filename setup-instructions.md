@@ -110,6 +110,22 @@ docker-compose up -d --build
       -Body '{"command": ["python3", "-c", "print(1+1)"], "image": "python:3.9-slim"}'
     ```
 
+*   **Execute a Python File (mounted volume):**
+    ```bash
+    # Assumes you have a script at /path/to/script.py on the host
+    curl -X POST http://localhost:8000/jobs \
+      -H "Content-Type: application/json" \
+      -d '{"command": ["python3", "/app/script.py"], "image": "python:3.9-slim"}'
+    ```
+    > **Note:** To execute local Python files, you need to mount them into the container. This requires modifying the worker's Docker execution logic to support volume mounts, or building a custom image with your script included.
+
+*   **Run a Data Processing Job:**
+    ```bash
+    a0264172-7baa-4939-8ef5-f1e7026d37af http://localhost:8000/jobs \
+      -H "Content-Type: application/json" \
+      -d '{"command": ["python3", "-c", "import pandas as pd; print(pd.DataFrame({\"a\": [1,2,3]}).sum())"], "image": "python:3.9-slim"}'
+    ```
+
 ### 2. Job Status
 **Endpoint:** `GET /jobs/{job_id}`
 **Description:** Check the current status of a job.
@@ -122,6 +138,20 @@ docker-compose up -d --build
   "retry_count": 0
 }
 ```
+
+**Examples:**
+
+*   **Bash (curl):**
+    ```bash
+    # Replace <job_id> with the actual job ID from submission response
+    curl http://localhost:8000/jobs/3a01bda6-8e76-492a-9f65-05eb9e641b34
+    ```
+
+*   **PowerShell:**
+    ```powershell
+    # Replace <job_id> with the actual job ID from submission response
+    Invoke-WebRequest -Uri "http://localhost:8000/jobs/3a01bda6-8e76-492a-9f65-05eb9e641b34" -Method Get
+    ```
 
 ### 3. Observability
 **Endpoint:** `GET /metrics`
