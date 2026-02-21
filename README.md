@@ -1,66 +1,72 @@
 # Distributed Job Scheduler
 
-A runnable, resume-ready project spec for a Python-based distributed job scheduler (mini Kubernetes-like scheduler).
+A Python-based distributed job scheduler that accepts jobs (arbitrary Python scripts with dependencies), schedules them on worker nodes, runs them in containers with cached environments, and provides durability, HA leader election, retries, and observability.
 
 ## Overview
 
-Build a Python-based distributed job scheduler that accepts jobs, schedules them on worker nodes, runs them in containers, and provides durability, HA leader election, retries, and observability. The project should be runnable locally (docker-compose) and optionally on Kubernetes.
+Submit Python scripts with their `requirements.txt`. The system automatically:
+- Stores job bundles in MinIO (S3-compatible artifact store)
+- Builds and caches Docker images with the required dependencies
+- Bind-mounts your script into the cached environment
+- Runs jobs across distributed workers with retry and recovery
 
 ## Tech Stack
 
 * **Language:** Python 3.9+
 * **API:** FastAPI
-* **Store:** PostgreSQL, Redis Streams
-* **Orchestration:** Docker Compose
-* **Observability:** Prometheus, Grafana
+* **Job Queue:** Redis Streams
+* **State Store:** PostgreSQL
+* **Artifact Store:** MinIO
+* **Leader Election:** Redis SETNX
+* **Container Runtime:** Docker (via Python SDK)
+* **Orchestration:** Docker Compose (dev) / Docker Swarm (prod)
+* **Observability:** Prometheus, Grafana, Loki
 
-## Features
+##  Architecture 
 
-### What Can Workers Execute?
-Workers can run **any containerized workload** using Docker. This includes:
+![Diagram](shared/Arch.png)
 
-1. **Python Scripts**
-   - Execute Python files from any image (e.g., `python:3.9-slim`)
-   - Run data processing, ML training, web scraping, etc.
-   - Example: `{"command": ["python3", "/app/script.py"], "image": "python:3.9-slim"}`
+## Key Features
 
-2. **Shell Commands**
-   - Run bash scripts, system utilities, file operations
-   - Example: `{"command": ["bash", "-c", "ls -la && echo done"], "image": "ubuntu:latest"}`
-
-3. **Data Processing**
-   - ETL pipelines, CSV/JSON processing
-   - Example: `{"command": ["python3", "-c", "import pandas; print('Processing...')"], "image": "pandas-image"}`
-
-4. **Custom Applications**
-   - Any Docker image with your application
-   - Example: `{"command": ["./my-app", "--config", "prod.yml"], "image": "myregistry/myapp:v1.0"}`
-
-5. **Multi-step Workflows**
-   - Chain commands using shell operators
-   - Example: `{"command": ["sh", "-c", "wget data.csv && python process.py && rm data.csv"], "image": "python:3.9"}`
-
-### Key Capabilities
-- **Automatic Retries:** Failed jobs retry up to 3 times
-- **Resource Isolation:** Each job runs in its own container
-- **Distributed Execution:** Scale workers horizontally
-- **Leader Election:** High availability with multiple schedulers
-- **Observability:** Real-time metrics via Prometheus/Grafana
-
-
+- **Arbitrary Script Execution:** Upload any Python script with a `requirements.txt`
+- **Environment Caching:** Docker images built per unique `requirements.txt` hash, reused across jobs
+- **Automatic Retries:** Failed jobs retry with configurable limits
+- **HA Scheduler:** 3 replicas with Redis-based leader election; failover in <10s
+- **Crash Recovery:** Dead worker detection and automatic job re-enqueue
+- **CLI Tool:** `scheduler submit`, `scheduler status`, `scheduler logs`
+- **Observability:** Prometheus metrics, Grafana dashboards, Loki log aggregation
 
 ## Quick Start
 
 1.  **Prerequisites:** Docker, Docker Compose, Python 3.9+
 2.  **Start Infrastructure:**
     ```bash
-    docker-compose up -d
+    docker-compose up -d --build
     ```
-3.  **Access Services:**
+3.  **Submit a job via CLI:**
+    ```bash
+    pip install -e .
+    scheduler submit --script ./my_script.py --requirements ./requirements.txt
+    ```
+4.  **Or submit via API:**
+    ```bash
+    curl -X POST http://localhost:8000/jobs/upload \
+      -F "script=@./my_script.py" \
+      -F "requirements=@./requirements.txt"
+    ```
+5.  **Access Services:**
     *   API: http://localhost:8000
+    *   MinIO Console: http://localhost:9001
     *   Prometheus: http://localhost:9090
     *   Grafana: http://localhost:3000
+    *   Loki: http://localhost:3100
 
 ## Documentation
-For detailed setup instructions, usage guide, API reference, and troubleshooting, please refer to [setup-instructions.md](./setup-instructions.md).
 
+For detailed setup instructions, see [setup-instructions.md](./setup-instructions.md).
+
+## Notes:
+
+Docker Swarm Deployment is not tested for production deployment  !!!!!!!
+
+![license](LICENSE)

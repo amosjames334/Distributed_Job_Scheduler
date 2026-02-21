@@ -10,14 +10,7 @@ SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_co
 
 Base = declarative_base()
 
+
 async def get_db_session():
     async with SessionLocal() as session:
         yield session
-
-# Etcd Setup
-import etcd3
-ETCD_HOST = os.getenv("ETCD_HOST", "localhost")
-ETCD_PORT = int(os.getenv("ETCD_PORT", 2379))
-
-def get_etcd_client():
-    return etcd3.client(host=ETCD_HOST, port=ETCD_PORT)

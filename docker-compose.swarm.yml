@@ -1,0 +1,116 @@
+version: "3.9"
+
+services:
+
+  api:
+    image: scheduler/api:latest
+    deploy:
+      replicas: 2
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minio123}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-scheduler}
+    depends_on:
+      - redis
+      - minio
+      - postgres
+
+  scheduler:
+    image: scheduler/scheduler:latest
+    deploy:
+      replicas: 3
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-scheduler}
+
+  worker:
+    image: scheduler/worker:latest
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.role == worker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/jobs:/tmp/jobs
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minio123}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-scheduler}
+      - TMP_JOBS_DIR=/tmp/jobs
+
+  minio:
+    image: minio/minio:latest
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minio123}
+
+  redis:
+    image: redis:7-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:15-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-scheduler}
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+
+  loki:
+    image: grafana/loki:latest
+    deploy:
+      replicas: 1
+    ports:
+      - "3100:3100"
+
+  grafana:
+    image: grafana/grafana:latest
+    deploy:
+      replicas: 1
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-admin}
+
+  prometheus:
+    image: prom/prometheus:latest
+    deploy:
+      replicas: 1
+    ports:
+      - "9090:9090"
+
+volumes:
+  minio_data:
+  redis_data:
+  postgres_data:

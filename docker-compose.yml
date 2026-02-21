@@ -19,6 +19,9 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -37,14 +40,13 @@ services:
     volumes:
       - minio_data:/data
 
-  etcd:
-    image: gcr.io/etcd-development/etcd:v3.5.9
-    command: 
-      - /usr/local/bin/etcd
-      - --advertise-client-urls=http://0.0.0.0:2379
-      - --listen-client-urls=http://0.0.0.0:2379
+  loki:
+    image: grafana/loki:latest
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./infra/loki-config.yml:/etc/loki/loki-config.yml
     ports:
-      - "2389:2379"
+      - "3100:3100"
 
   prometheus:
     image: prom/prometheus
@@ -62,6 +64,9 @@ services:
       - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - loki
+      - prometheus
 
   api:
     build:
@@ -77,6 +82,10 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://user:password@postgres:5432/scheduler
       - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ROOT_USER=minio
+      - MINIO_ROOT_PASSWORD=minio123
+      - LOKI_URL=http://loki:3100
 
   scheduler:
     build:
@@ -87,13 +96,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      etcd:
-        condition: service_started
     environment:
       - DATABASE_URL=postgresql+asyncpg://user:password@postgres:5432/scheduler
       - REDIS_URL=redis://redis:6379
-      - ETCD_HOST=etcd
-      - ETCD_PORT=2379
 
   worker:
     build:
@@ -105,11 +110,15 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - DATABASE_URL=postgresql+asyncpg://user:password@postgres:5432/scheduler
-      # In a real scenario, we'd mount the docker socket or use dind
-      # For now, simplistic
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ROOT_USER=minio
+      - MINIO_ROOT_PASSWORD=minio123
+      - TMP_JOBS_DIR=/tmp/jobs
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/jobs:/tmp/jobs
 
 volumes:
   postgres_data:
+  redis_data:
   minio_data:
