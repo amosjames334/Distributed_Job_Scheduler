@@ -31,7 +31,7 @@ poetry install
 
 ## Usage Guide
 
-### 1. Submit a Job (New - Multipart Upload)
+### 1. Submit a Job
 
 **Via CLI:**
 ```bash
@@ -46,7 +46,22 @@ scheduler submit \
   --retries 5 \
   --timeout 600 \
   --env '{"MODEL": "gpt2", "EPOCHS": "10"}'
+
+# Allow internet access (disabled by default)
+scheduler submit --script ./fetch.py --requirements ./requirements.txt --network
 ```
+
+Options:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--script`, `-s` | required | Path to the Python script |
+| `--requirements`, `-r` | none | Path to `requirements.txt` |
+| `--image`, `-i` | `python:3.11-slim` | Base Docker image |
+| `--retries` | `3` | Max retries on failure |
+| `--timeout` | `300` | Timeout in seconds |
+| `--env`, `-e` | `{}` | Environment variables as a JSON string |
+| `--network` / `--no-network` | `--no-network` | Allow the job network access at runtime |
 
 **Via curl:**
 ```bash
@@ -55,7 +70,8 @@ curl -X POST http://localhost:8000/jobs/upload \
   -F "requirements=@./requirements.txt" \
   -F "image_base=python:3.11-slim" \
   -F "retries=3" \
-  -F "timeout=300"
+  -F "timeout=300" \
+  -F "network=false"
 ```
 
 **Via PowerShell:**
@@ -68,20 +84,15 @@ $form = @{
 Invoke-RestMethod -Uri "http://localhost:8000/jobs/upload" -Method Post -Form $form
 ```
 
-### 2. Submit a Job (Legacy - JSON)
-
-**Via curl:**
-```bash
-curl -X POST http://localhost:8000/jobs \
-  -H "Content-Type: application/json" \
-  -d '{"command": ["echo", "Hello World"], "image": "ubuntu:latest"}'
-```
-
-### 3. Check Job Status
+### 2. Check Job Status
 
 **Via CLI:**
 ```bash
+# One-off status
 scheduler status <job_id>
+
+# Poll until the job reaches a terminal state (SUCCESS / FAILED / DEAD / CANCELED)
+scheduler status <job_id> --watch --interval 2
 ```
 
 **Via curl:**
@@ -89,14 +100,15 @@ scheduler status <job_id>
 curl http://localhost:8000/jobs/<job_id>
 ```
 
-### 4. View Job Logs
+### 3. View Job Logs
 
 **Via CLI:**
 ```bash
 scheduler logs <job_id>
 ```
+Returns the job's captured stdout/stderr.
 
-### 5. List Jobs
+### 4. List Jobs
 
 **Via CLI:**
 ```bash
@@ -117,9 +129,11 @@ PENDING
                       |-> DEAD               (retries exhausted)
 ```
 
-## Docker Swarm Deployment (Testing Pending)
+## Docker Swarm Deployment
 
-For production with Docker Swarm:
+> Note: the Swarm configuration is provided as a reference and has not been validated for production.
+
+For a multi-node deployment with Docker Swarm:
 ```bash
 docker swarm init
 docker stack deploy -c docker-compose.swarm.yml scheduler

@@ -50,6 +50,7 @@ async def upload_job(
     retries: int = Form(3),
     timeout: int = Form(300),
     env: str = Form("{}"),
+    network: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
     """New endpoint: multipart upload with script + requirements."""
@@ -75,6 +76,7 @@ async def upload_job(
         "retries": retries,
         "timeout": timeout,
         "env": env_dict,
+        "network": network,
     }
     upload_manifest(str(job_id), manifest)
 

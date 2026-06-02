@@ -18,7 +18,7 @@ def run_job(job_id: str, image: str, script_host_path: str, manifest: dict) -> t
             environment=manifest.get("env", {}),
             mem_limit=manifest.get("mem_limit", "512m"),
             nano_cpus=int(manifest.get("cpu_limit", 1) * 1e9),
-            network_disabled=True,
+            network_disabled=not manifest.get("network", False),
             read_only=True,
             remove=True,
             name=f"job-{job_id}",
